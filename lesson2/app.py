@@ -1,63 +1,28 @@
-# coding: utf-8
-
-from flask import Flask, render_template, request
-from bson import json_util
-from pymongo import MongoClient
+from flask import Flask, request, make_response
+import redis
+from time import strftime
+import hashlib
+import uuid
 
 app = Flask(__name__)
 
-##
-## Подключение базе данных и доступ к таблице с индексом
-##
-client = MongoClient()
-db = client.themap
-places = db.places
-places.create_index([('geometry', '2dsphere')])
+r = redis.Redis(host='localhost', port=6379, db=0)
 
-##
-## Отдаём фронтенд
-##
-@app.route('/')
-def root():
-    return render_template('index.html')
+@app.route('/count_requests')
+def theanswer():
+    day = strftime("%Y-%m-%d")
 
-##
-## Создаём новый комментарий к базе данных
-##
-@app.route('/newplace', methods=['POST'])
-def newplace():
-    content = request.get_json(silent=True, force=True)
+    user_hash_id = request.cookies.get('user_hash_id')
 
-    place_id = places.insert_one(content).inserted_id
+    if user_hash_id is None:
+        hash_object = hashlib.md5(str(uuid.uuid1()).encode('utf-8'))
+        user_hash_id = hash_object.hexdigest()
 
-    return json_util.dumps(content)
 
-##
-## Возвращаем комментарии, которые географически близки
-## к запрашиваемой точке
-##
-@app.route('/places')
-def getplaces():
-    lat = request.args.get('lat')
-    lng = request.args.get('lng')
-    dist = request.args.get('distance')
-    if dist is None:
-        dist = 4000
+    key = f'page:index:counter:{day}:{user_hash_id}'
+    r.incr(key)
 
-    cursor = places.find({
-        "geometry": {
-            "$nearSphere": {
-                "$geometry": {
-                    "type" : "Point",
-                    "coordinates" : [ float(lng), float(lat) ]
-                },
-                "$minDistance": 0,
-                "$maxDistance": dist } } ,"properties.rate":{"$gt":2}})
+    resp = make_response(f'42  / {key} / - ' + str(int(r.get(key))))
+    resp.set_cookie('user_hash_id', user_hash_id, max_age=None)
 
-    resultset = []
-    for place in cursor:
-        resultset.append(place)
-    return json_util.dumps(resultset)
-
-if __name__ == '__main__':
-    app.run(debug=True) 
+    return resp
