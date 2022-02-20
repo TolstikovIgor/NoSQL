@@ -1,0 +1,137 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+<head>
+	<meta http-equiv="content-type" content="text/html; charset=utf-8"/>
+	<title></title>
+	<meta name="generator" content="LibreOffice 6.0.7.3 (Linux)"/>
+	<meta name="created" content="00:00:00"/>
+	<meta name="changed" content="2021-07-27T19:31:04.342338692"/>
+	<style type="text/css">
+		@page { margin: 2cm }
+		p { margin-bottom: 0.25cm; line-height: 115% }
+		pre.cjk { font-family: "DejaVu Sans Mono", monospace }
+		a:link { so-language: zxx }
+	</style>
+</head>
+<body lang="ru-RU" dir="ltr">
+<pre class="western">&lt;html&gt;
+    &lt;head&gt;
+        &lt;link rel=&quot;stylesheet&quot; href=&quot;https://unpkg.com/leaflet@1.7.1/dist/leaflet.css&quot;
+              crossorigin=&quot;&quot;/&gt;
+        &lt;script src=&quot;https://unpkg.com/leaflet@1.7.1/dist/leaflet.js&quot;
+                crossorigin=&quot;&quot;&gt;&lt;/script&gt;
+        &lt;script src=&quot;https://unpkg.com/leaflet-providers@1.0.13/leaflet-providers.js&quot;
+                crossorigin=&quot;&quot;&gt;&lt;/script&gt;
+    &lt;/head&gt;
+    &lt;body&gt;
+        &lt;!-- Отображение карты и текущих координат --&gt;
+        &lt;div id=&quot;mapid&quot; style=&quot;height:600px&quot;&gt;&lt;/div&gt;
+        &lt;div id=&quot;centerid&quot;&gt;Center:&lt;/div&gt;
+
+        &lt;script&gt;
+         /*
+          * Виджет карты
+          */
+         var mymap = L.map('mapid',
+                           {'tap':false})
+                      .setView([51.3671, 42.0849], 13);
+
+         /*
+          * Слой карты с домами, улицами и т.п.
+          */
+         var OpenStreetMap_Mapnik = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+             maxZoom: 19,
+             attribution: '&amp;copy; &lt;a href=&quot;https://www.openstreetmap.org/copyright&quot;&gt;OpenStreetMap&lt;/a&gt; contributors',
+         }).addTo(mymap);
+
+         /*
+          * Слой карты с комментариями
+          * Этот слой будут наполнять пользователи
+          */
+         var got = {}
+         var layer = L.geoJSON(null, {
+             &quot;onEachFeature&quot;: function (feature, layer) {
+                 got[feature['_id']['$oid']] = true;
+                 if (feature.properties &amp;&amp; feature.properties.comment &amp;&amp; feature.properties.rate) {
+                     var popup = layer.bindPopup(feature.properties.comment <font color="#ce181e">+&quot;&lt;/br&gt; rating: &quot;+ feature.properties.rate</font>);
+
+                 }
+             },
+             &quot;filter&quot;: function(feature) {
+                 /* Фильтруем элементы, которые уже были отображены на карте */
+                 return got[feature['_id']['$oid']] != true;
+             }
+         }).addTo(mymap);
+
+         /*
+          * Диалог для комметария
+          */
+         function onMapClick(e) {
+             var commentResponse = window.prompt('What do you think about this place?', 'not bad');
+             <font color="#ce181e">var rateResponse = window.prompt('How do you rate this place? (1-5)', '5');</font>
+             if (commentResponse != null) {
+                 var data = {
+                     &quot;type&quot;: &quot;Feature&quot;,
+                     &quot;geometry&quot;: {
+                         &quot;type&quot;: &quot;Point&quot;,
+                         &quot;coordinates&quot;: [e.latlng['lng'], e.latlng['lat']]
+                     },
+                     &quot;properties&quot;: {
+                         &quot;comment&quot;: <font color="#ce181e">commentResponse,</font>
+<font color="#ce181e">                         &quot;rate&quot;:Number(rateResponse)</font>
+                     },
+
+                 }
+
+                 fetch(&quot;/newplace&quot;, {
+                     method: &quot;POST&quot;,
+                     body: JSON.stringify(data)
+                 }).then(function (res) {
+                     res.json().then(function (data) {
+                         layer.addData(data);
+                     })
+                 });
+             }
+         }
+
+         mymap.on('click', onMapClick);
+
+         /*
+          * Загрузка комметариев с сервера, расположенных поблизости от текущих
+          * координат
+          */
+         function getPlaces() {
+             var request = {};
+             fetch(&quot;/places?&quot; + new URLSearchParams(mymap.getCenter()))
+                 .then(function(res) {
+                     res.json().then(function(data) {
+                         layer.addData(data);
+                     })
+                 });
+         }
+
+         /*
+          * Загружаем комметарии при навигации по карте
+          */
+         var timerId = null
+         function onMapMove(e) {
+             document.getElementById(&quot;centerid&quot;).innerHTML = &quot;Center: &quot; + mymap.getCenter();
+
+             if (timerId == null) {
+                 timerId = setTimeout(function() {
+                     getPlaces();
+                     timerId = null }, 1000);
+             }
+         };
+
+         mymap.on('move', onMapMove);
+
+         document.getElementById(&quot;centerid&quot;).innerHTML = &quot;Center: &quot; + mymap.getCenter();
+         timerId = setTimeout(function() {
+             getPlaces();
+             timerId = null }, 1000);
+        &lt;/script&gt;
+    &lt;/body&gt;
+&lt;/html&gt;</pre>
+</body>
+</html>
